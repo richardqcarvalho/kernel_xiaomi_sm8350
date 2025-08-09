@@ -174,7 +174,6 @@ static int brl_reset_after(struct goodix_ts_core *cd)
 static int brl_power_on(struct goodix_ts_core *cd, bool on)
 {
 	int ret = 0;
-	int avdd_gpio = cd->board_data.avdd_gpio;
 	int reset_gpio = cd->board_data.reset_gpio;
 
 	if (on) {
@@ -186,15 +185,19 @@ static int brl_power_on(struct goodix_ts_core *cd, bool on)
 		}
 		ts_info("iovdd regulator enbaled success");
 		usleep_range(3000, 3100);
-		gpio_direction_output(avdd_gpio, 1);
-		ts_info("avdd gpio init success");
+		ret = regulator_enable(cd->avdd);
+		if (ret) {
+			regulator_disable(cd->iovdd);
+			ts_err("Failed to enable avdd:%d", ret);
+			return ret;
+		}
 		usleep_range(15000, 15100);
 		gpio_direction_output(reset_gpio, 1);
 		ts_info("reset gpio init success");
 		ret = brl_reset_after(cd);
 		if (ret < 0) {
 			ts_err("reset_after process failed");
-			gpio_direction_output(avdd_gpio, 0);
+			gpio_direction_output(reset_gpio, 0);
 			return ret;
 		}
 		msleep(GOODIX_NORMAL_RESET_DELAY_MS);
@@ -206,7 +209,9 @@ static int brl_power_on(struct goodix_ts_core *cd, bool on)
 	ret = regulator_disable(cd->iovdd);
 	if (ret)
 		ts_err("Failed to disable iovdd:%d", ret);
-	gpio_direction_output(avdd_gpio, 0);
+	ret = regulator_disable(cd->avdd);
+	if (ret)
+		ts_err("Failed to disable avdd:%d", ret);
 	usleep_range(10000, 11000);
 	
 	return ret;
