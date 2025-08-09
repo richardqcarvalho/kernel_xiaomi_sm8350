@@ -270,6 +270,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 		ts_info("gesture coordinate fodx:0x%x, fody:0x%x, overlay_area:0x%x",
                             fodx,fody,overlay_area);
 		ts_info("fod down");
+		update_fod_press_status(1);
 			input_report_key(cd->input_dev, BTN_INFO, 1);
 			input_sync(cd->input_dev);
 #ifdef TYPE_B_PROTOCOL
@@ -293,6 +294,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 		if (cd->fod_finger) {
 			ts_info("fod finger is %d",cd->fod_finger);
 			ts_info("fod up");
+			update_fod_press_status(0);
 			cd->fod_finger = false;
 			input_report_key(cd->input_dev, BTN_INFO, 0);
 			input_report_abs(cd->input_dev, ABS_MT_WIDTH_MAJOR, 0);
