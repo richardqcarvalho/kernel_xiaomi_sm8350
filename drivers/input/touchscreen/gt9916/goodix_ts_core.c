@@ -2828,6 +2828,8 @@ static ssize_t goodix_ts_fod_test_store(struct device *dev,
 }
 
 static DEVICE_ATTR(fod_test, (S_IRUGO | S_IWUSR | S_IWGRP), NULL, goodix_ts_fod_test_store);
+static DEVICE_ATTR(double_tap, 0664, goodix_ts_double_tap_show, goodix_ts_double_tap_store);
+static DEVICE_ATTR(fod_status, 0664, goodix_ts_fod_show, goodix_ts_fod_store);
 
 #ifdef GOODIX_XIAOMI_TOUCHFEATURE
 static struct xiaomi_touch_interface xiaomi_touch_interfaces;
@@ -3394,6 +3396,14 @@ static int goodix_ts_probe(struct platform_device *pdev)
             dev_set_drvdata(core_data->goodix_touch_dev, core_data);
             if (sysfs_create_file(&core_data->goodix_touch_dev->kobj, &dev_attr_fod_test.attr)) {
                 ts_err("Failed to create fod_test sysfs group!\n");
+                goto err_class_create;
+            }
+            if (sysfs_create_file(&core_data->goodix_touch_dev->kobj, &dev_attr_double_tap.attr)) {
+                ts_err("Failed to create double_tap sysfs group!\n");
+                goto err_class_create;
+            }
+            if (sysfs_create_file(&core_data->goodix_touch_dev->kobj, &dev_attr_fod_status.attr)) {
+                ts_err("Failed to create fod_status sysfs group!\n");
                 goto err_class_create;
             }
         }
