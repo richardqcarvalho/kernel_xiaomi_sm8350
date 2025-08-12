@@ -169,8 +169,10 @@ enum esd_check_status_mode {
 
 struct drm_panel_esd_config {
 	bool esd_enabled;
+	bool esd_aod_enabled;
 
 	enum esd_check_status_mode status_mode;
+	struct dsi_panel_cmd_set offset_cmd;
 	struct dsi_panel_cmd_set status_cmd;
 	u32 *status_cmds_rlen;
 	u32 *status_valid_params;
@@ -284,7 +286,7 @@ struct dsi_panel {
 	bool fod_hbm_enabled;
 	bool fod_hbm_requested;
 	bool fod_ui;
-	int local_hbm_on_1000nit_51_index;
+	int local_hbm_off_to_hbm_51_index;
 
 #ifdef CONFIG_DRM_SDE_EXPO
 	bool dimlayer_exposure;

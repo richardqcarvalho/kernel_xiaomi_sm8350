@@ -722,8 +722,8 @@ static int dsi_panel_update_cmd_reg51(struct dsi_panel *panel, enum dsi_cmd_set_
 	priv_info = panel->cur_mode->priv_info;
 
 	switch (type) {
-	case DSI_CMD_SET_MI_LOCAL_HBM_NORMAL_WHITE_1000NIT:
-		index = panel->local_hbm_on_1000nit_51_index;
+	case DSI_CMD_SET_MI_LOCAL_HBM_OFF_TO_HBM:
+		index = panel->local_hbm_off_to_hbm_51_index;
 		break;
 	default:
 		DSI_ERR("wrong cmd type!\n");
@@ -776,9 +776,9 @@ static int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
 						panel->name, rc);
 		} else {
 			rc = dsi_panel_update_cmd_reg51(panel,
-							DSI_CMD_SET_MI_LOCAL_HBM_NORMAL_WHITE_1000NIT,
+							DSI_CMD_SET_MI_LOCAL_HBM_OFF_TO_HBM,
 							panel->bl_config.real_bl_level);
-			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_LOCAL_HBM_NORMAL_WHITE_1000NIT);
+			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_LOCAL_HBM_OFF_TO_HBM);
 			if (rc)
 				DSI_ERR("[%s] failed to send local hbm on cmd, rc=%d\n",
 						panel->name, rc);
@@ -2000,6 +2000,7 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,cmd-to-video-mode-post-switch-commands",
 	"qcom,video-to-cmd-mode-switch-commands",
 	"qcom,video-to-cmd-mode-post-switch-commands",
+	"qcom,mdss-dsi-panel-status-offset-command",
 	"qcom,mdss-dsi-panel-status-command",
 	"qcom,mdss-dsi-lp1-command",
 	"qcom,mdss-dsi-lp2-command",
@@ -2017,6 +2018,7 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"mi,mdss-dsi-local-hbm-normal-white-1000nit-command",
 	"mi,mdss-dsi-local-hbm-hlpm-white-1000nit-command",
 	"mi,mdss-dsi-local-hbm-off-to-normal-command",
+	"mi,mdss-dsi-local-hbm-off-to-hbm-command",
 	"mi,mdss-dsi-local-hbm-off-to-hlpm-command",
 	"mi,mdss-dsi-hbm-on-command",
 	"mi,mdss-dsi-hbm-off-command",
@@ -2036,6 +2038,7 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,cmd-to-video-mode-post-switch-commands-state",
 	"qcom,video-to-cmd-mode-switch-commands-state",
 	"qcom,video-to-cmd-mode-post-switch-commands-state",
+	"qcom,mdss-dsi-panel-status-offset-command-state",
 	"qcom,mdss-dsi-panel-status-command-state",
 	"qcom,mdss-dsi-lp1-command-state",
 	"qcom,mdss-dsi-lp2-command-state",
@@ -2053,6 +2056,7 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"mi,mdss-dsi-local-hbm-normal-white-1000nit-command-state",
 	"mi,mdss-dsi-local-hbm-hlpm-white-1000nit-command-state",
 	"mi,mdss-dsi-local-hbm-off-to-normal-command-state",
+	"mi,mdss-dsi-local-hbm-off-to-hbm-command-state",
 	"mi,mdss-dsi-local-hbm-off-to-hlpm-command-state",
 	"mi,mdss-dsi-hbm-on-command-state",
 	"mi,mdss-dsi-hbm-off-command-state",
@@ -3520,6 +3524,7 @@ static void dsi_panel_esd_config_deinit(struct drm_panel_esd_config *esd_config)
 	kfree(esd_config->status_value);
 	kfree(esd_config->status_valid_params);
 	kfree(esd_config->status_cmds_rlen);
+	kfree(esd_config->offset_cmd.cmds);
 	kfree(esd_config->status_cmd.cmds);
 }
 
@@ -3540,6 +3545,12 @@ int dsi_panel_parse_esd_reg_read_configs(struct dsi_panel *panel)
 	esd_config = &panel->esd_config;
 	if (!esd_config)
 		return -EINVAL;
+
+	dsi_panel_parse_cmd_sets_sub(&esd_config->offset_cmd,
+				DSI_CMD_SET_PANEL_STATUS_OFFSET, utils);
+	if (!esd_config->offset_cmd.count) {
+		DSI_INFO("no panel status offset command\n");
+	}
 
 	dsi_panel_parse_cmd_sets_sub(&esd_config->status_cmd,
 				DSI_CMD_SET_PANEL_STATUS, utils);
@@ -3640,6 +3651,8 @@ error2:
 error1:
 	kfree(esd_config->status_cmd.cmds);
 error:
+	if (esd_config->offset_cmd.count > 0)
+		kfree(esd_config->offset_cmd.cmds);
 	return rc;
 }
 
@@ -3653,6 +3666,10 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel)
 
 	esd_config = &panel->esd_config;
 	esd_config->status_mode = ESD_MODE_MAX;
+
+	esd_config->esd_aod_enabled = utils->read_bool(utils->data,
+		"qcom,esd-aod-check-enabled");
+
 	esd_config->esd_enabled = utils->read_bool(utils->data,
 		"qcom,esd-check-enabled");
 
@@ -3723,11 +3740,11 @@ static int dsi_panel_parse_fod(struct dsi_panel *panel)
 	struct dsi_parser_utils *utils = &panel->utils;
 	int rc;
 
-	panel->local_hbm_on_1000nit_51_index = -1;
-	rc = utils->read_u32(utils->data, "mi,local-hbm-on-1000nit-51-index",
-			     &panel->local_hbm_on_1000nit_51_index);
+	panel->local_hbm_off_to_hbm_51_index = -1;
+	rc = utils->read_u32(utils->data, "mi,local-hbm-off-to-hbm-51-index",
+			     &panel->local_hbm_off_to_hbm_51_index);
 	if (rc)
-		DSI_INFO("mi,local-hbm-on-1000nit-51-index not specified\n");
+		DSI_INFO("mi,local-hbm-off-to-hbm-51-index not specified\n");
 
 	return 0;
 }
